@@ -12,12 +12,13 @@ using namespace std;
 // ABSTRACT BASE CLASS
 // ═══════════════════════════════════════════
 class Layer {
-protected:
+
+    public:
     vector<vector<double>> weights;
     vector<double> bias;
     vector<double> output;
-
-public:
+    
+    vector<double> lastInput;
     Layer(int inputSize, int outputSize);
     virtual void activate(const vector<double>& input) = 0;
     const vector<double>& getOutput() const { return output; }
@@ -52,6 +53,7 @@ private:
 public:
     NeuralNetwork();
     int predict(const vector<double>& input);
+    void train(const vector<double>& input, int correctLabel, double learningRate);
 };
 
 // ═══════════════════════════════════════════

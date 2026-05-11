@@ -25,6 +25,7 @@ Layer::Layer(int inputSize, int outputSize) {
 // HIDDEN LAYER — ReLU
 // ═══════════════════════════════════════════
 void HiddenLayer::activate(const vector<double>& input) {
+     lastInput = input;
     for (int i = 0; i < (int)output.size(); i++) {
         double temp = 0.0;
         for (int j = 0; j < (int)input.size(); j++)
@@ -38,6 +39,7 @@ void HiddenLayer::activate(const vector<double>& input) {
 // OUTPUT LAYER — Softmax
 // ═══════════════════════════════════════════
 void OutputLayer::activate(const vector<double>& input) {
+    lastInput = input;
     double sum = 0.0;
     for (int i = 0; i < (int)output.size(); i++) {
         double temp = 0.0;
@@ -66,7 +68,49 @@ int NeuralNetwork::predict(const vector<double>& input) {
             best = i;
     return best;
 }
+void NeuralNetwork::train(const vector<double>& input, int correctLabel, double learningRate) {
 
+    // ── Step 1: Forward pass ──
+    hidden.activate(input);
+    output.activate(hidden.getOutput());
+
+    // ── Step 2: Build correct one-hot vector ──
+    // All zeros except index of correct digit = 1
+    vector<double> correct(10, 0.0);
+    correct[correctLabel] = 1.0;
+
+    // ── Step 3: Output layer error ──
+    // error = predicted - correct
+    vector<double> outputError(10);
+    for (int i = 0; i < 10; i++)
+        outputError[i] = output.getOutput()[i] - correct[i];
+
+    // ── Step 4: Update output layer weights and biases ──
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 128; j++)
+            output.weights[i][j] -= learningRate * outputError[i] * output.lastInput[j];
+        output.bias[i] -= learningRate * outputError[i];
+    }
+
+    // ── Step 5: Pass error back to hidden layer ──
+    // Each hidden neuron gets a share of the output error
+    vector<double> hiddenError(128, 0.0);
+    for (int j = 0; j < 128; j++) {
+        for (int i = 0; i < 10; i++)
+            hiddenError[j] += outputError[i] * output.weights[i][j];
+
+        // ReLU backprop — block error if neuron was not active
+        if (hidden.getOutput()[j] <= 0)
+            hiddenError[j] = 0.0;
+    }
+
+    // ── Step 6: Update hidden layer weights and biases ──
+    for (int i = 0; i < 128; i++) {
+        for (int j = 0; j < 784; j++)
+            hidden.weights[i][j] -= learningRate * hiddenError[i] * hidden.lastInput[j];
+        hidden.bias[i] -= learningRate * hiddenError[i];
+    }
+}
 // ═══════════════════════════════════════════
 // DATA LOADER
 // ═══════════════════════════════════════════
@@ -148,13 +192,31 @@ int main() {
     // ── Build Network ──
     NeuralNetwork nn;
 
-    // ── Test on first 5 images ──
-    cout << "\n--- Testing on first 5 images (untrained) ---" << endl;
-    for (int i = 0; i < 5; i++) {
-        int prediction = nn.predict(loader.getImages()[i]);
-        cout << "Image " << i
-             << " | Correct: " << loader.getLabels()[i]
-             << " | Predicted: " << prediction << endl;
+    // ── Training Loop ──
+    double learningRate = 0.01;
+    int epochs = 3; // 3 passes through all 60000 images
+
+    for (int e = 0; e < epochs; e++) {
+        int correct = 0;
+
+        for (int i = 0; i < loader.getCount(); i++) {
+            // Train on this image
+            nn.train(loader.getImages()[i], loader.getLabels()[i], learningRate);
+
+            // Check prediction
+            int prediction = nn.predict(loader.getImages()[i]);
+            if (prediction == loader.getLabels()[i])
+                correct++;
+
+            // Print progress every 10000 images
+            if ((i + 1) % 10000 == 0)
+                cout << "Epoch " << e+1 << " | Image " << i+1
+                     << " | Accuracy so far: "
+                     << (correct * 100.0 / (i+1)) << "%" << endl;
+        }
+
+        cout << "=== Epoch " << e+1 << " complete | Accuracy: "
+             << (correct * 100.0 / loader.getCount()) << "% ===" << endl;
     }
 
     return 0;
